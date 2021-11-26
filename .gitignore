@@ -1,2 +1,4 @@
 pytorch/data/*
 pytorch/.idea/*
+*__pycache__/*
+*.pyc*
