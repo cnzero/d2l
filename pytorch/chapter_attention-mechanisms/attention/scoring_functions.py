@@ -1,9 +1,19 @@
+# !/Users/robot1/anaconda3/envs/d2l/bin/python
+# -*- coding: utf-8 -*-
+# @time: 2021-11-21
+# @author: cnzero
+
+"""mask-based scoring functions and classes:
+`AdditiveAttention`, `DotProductAttention`
+"""
+
 import math
 import torch
 from torch import nn
 
-def sequence_mask(X, 
-                  valid_len, 
+
+def sequence_mask(X,
+                  valid_len=None,
                   value=0.0):
     """mask a sequence out of `valid_len` with `value`
 
@@ -19,19 +29,20 @@ def sequence_mask(X,
     """
     maxlen = X.size(1)
     # shape(1, maxlen)
-    idx = torch.arange(start=0, end=maxlen, step=1, 
-                       dtype=torch.float32, 
+    idx = torch.arange(start=0, end=maxlen, step=1,
+                       dtype=torch.float32,
                        device=X.device)[None, :]
     # shape(a, 1)
-    valid_lens =  valid_len[:, None]
+    valid_lens = valid_len[:, None]
     # shape(a, maxlen)
     mask_boolmat = idx < valid_lens
     X[~mask_boolmat] = value
-    
+
     return X
 
-def masked_softmax(X, 
-                   valid_lens, 
+
+def masked_softmax(X,
+                   valid_lens=None,
                    value=-1e6):
     """mask a mat `X` out of `valid_lens` with `value`
 
@@ -57,30 +68,27 @@ def masked_softmax(X,
             assert len(valid_lens) == X.shape[0]
             # shape(shape[0]*shape[1], )
             valid_lens = torch.repeat_interleave(valid_lens, shape[1])
-        else: # .dim() == 2
+        else:  # .dim() == 2
             assert valid_lens.shape[0] == X.shape[0]
             assert valid_lens.shape[1] == X.shape[1]
             # shape(shape[0]*shape[1], )
-            valid_lens = valid_lens.reshape(-1) # flatten
+            valid_lens = valid_lens.reshape(-1)  # flatten
         # finally, valid_lens.shape -->> (shape[0]*shape[1], )
 
         # -> X.shape(shape[0]*shape[1], shape[2])
         X = X.reshape(-1, shape[-1])
-        X = sequence_mask(X=X, 
-                          valid_len=valid_lens, 
+        X = sequence_mask(X=X,
+                          valid_len=valid_lens,
                           value=value)
         return nn.functional.softmax(X.reshape(shape), dim=-1)
 
+
 class AdditiveAttention(nn.Module):
-    """math: a(\mathbf q, \mathbf k) 
-    = \mathbf w_v^\top \text{tanh}(\mathbf W_q\mathbf q 
-                                   + \mathbf W_k \mathbf k) \in \mathbb{R}
-    """
-    def __init__(self, 
-                 query_size, 
+    def __init__(self,
+                 query_size,
                  key_size,
-                 num_hiddens, 
-                 dropout, 
+                 num_hiddens,
+                 dropout=0.0,
                  **kwargs):
         """init setting of the attention model
 
@@ -91,21 +99,21 @@ class AdditiveAttention(nn.Module):
             dropout ([type]): [description]
         """
         super(AdditiveAttention, self).__init__(**kwargs)
-        self.W_q = nn.Linear(in_features=query_size, 
-                             out_features=num_hiddens, 
+        self.W_q = nn.Linear(in_features=query_size,
+                             out_features=num_hiddens,
                              bias=False)
-        self.W_k = nn.Linear(in_features=key_size, 
-                             out_features=num_hiddens, 
+        self.W_k = nn.Linear(in_features=key_size,
+                             out_features=num_hiddens,
                              bias=False)
-        self.W_v = nn.Linear(in_features=num_hiddens, 
-                             out_features=1, 
+        self.W_v = nn.Linear(in_features=num_hiddens,
+                             out_features=1,
                              bias=False)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self,
-                queries, 
-                keys, 
-                values, 
+                queries,
+                keys,
+                values,
                 valid_lens):
         """[summary]
 
@@ -132,10 +140,11 @@ class AdditiveAttention(nn.Module):
         # shape(B, no.Q, no.KV, num_hiddens) * shape(num_hiddens, 1)
         # squeeze(-1) -> shape(B, no.Q, no.KV)
         scores = self.W_v(features).squeeze(-1)
-        self.attention_weights = masked_softmax(X=scores, 
+        self.attention_weights = masked_softmax(X=scores,
                                                 valid_lens=valid_lens)
 
         return torch.bmm(self.dropout(self.attention_weights), values)
+
 
 class DotProductAttention(nn.Module):
     """[summary]
@@ -143,8 +152,9 @@ class DotProductAttention(nn.Module):
     Args:
         nn ([type]): [description]
     """
-    def __init__(self, 
-                 dropout, 
+
+    def __init__(self,
+                 dropout=0.0,
                  **kwargs):
         """[summary]
 
@@ -153,11 +163,12 @@ class DotProductAttention(nn.Module):
         """
         super(DotProductAttention, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
+        self.attention_weights = None
 
-    def forward(self, 
-                queries, 
-                keys, 
-                values, 
+    def forward(self,
+                queries,
+                keys,
+                values,
                 valid_lens=None):
         """[summary]
 
@@ -172,65 +183,66 @@ class DotProductAttention(nn.Module):
         """
         d = queries.shape[-1]
         scores = torch.bmm(queries, keys.transpose(1, 2)) / math.sqrt(d)
-        self.attention_weights = masked_softmax(X=scores, 
+        self.attention_weights = masked_softmax(X=scores,
                                                 valid_lens=valid_lens)
         return torch.bmm(self.dropout(self.attention_weights), values)
+
 
 if __name__ == "__main__":
     print('Hello world.')
     print('Wow, I bought a second-hand desk. I really need it.')
 
-    print('-'*20, 'test `masked_softmax()`')
+    print('-' * 20, 'test `masked_softmax()`')
     size_inputs = (2, 3, 4)
     # valid_lens = torch.tensor([2]) # invalid
-    valid_lens = torch.tensor([2, 3]) # valid
+    valid_lens = torch.tensor([2, 3])  # valid
     # valid_lens = torch.tensor([2, 3, 4]) # invalid
     # valid_lens = torch.tensor([[1,2,3], [2,3,4]]) # valid
-    print(masked_softmax(X=torch.rand(size=size_inputs), 
+    print(masked_softmax(X=torch.rand(size=size_inputs),
                          valid_lens=valid_lens))
-    
-    print('='*20, 'test `AdditiveAttention()`')
-    batch_size = 2 # `batch`, single, rather than plural `batches`
 
-    num_queries = 3 # `_queries`, plural, rather than `query`, 
-                    # like `in_features` `num_hiddens` in standard torch APIs
-    query_size = 20 # like `batch_size`, single
+    print('=' * 20, 'test `AdditiveAttention()`')
+    batch_size = 2  # `batch`, single, rather than plural `batches`
 
-    key_size = 3    # like `batch_size`, single
+    num_queries = 3  # `_queries`, plural, rather than `query`,
+    # like `in_features` `num_hiddens` in standard torch APIs
+    query_size = 20  # like `batch_size`, single
+
+    key_size = 3  # like `batch_size`, single
     value_size = 6  # like `batch_size`, single
-    num_kvs = 9     # like `num_hiddens`, plural key_value pairs
+    num_kvs = 9  # like `num_hiddens`, plural key_value pairs
 
     num_hiddens = 8
 
     # shape(B, no.Q, query_size)
-    queries = torch.normal(mean=0, 
-                           std=1, 
+    queries = torch.normal(mean=0,
+                           std=1,
                            size=(batch_size, num_queries, query_size))
     # shape(B, no.KV, key_size)
     keys = torch.ones(size=(batch_size, num_kvs, key_size))
-    values = torch.arange(num_kvs*value_size, 
+    values = torch.arange(num_kvs * value_size,
                           dtype=torch.float32)
     # shape(B, no.KV, value_size)
-    values = values.reshape(shape=(1, num_kvs, value_size)).repeat(repeats=(batch_size, 1, 1))
+    values = values.reshape((1, num_kvs, value_size)).repeat(repeats=(batch_size, 1, 1))
 
     valid_lens = torch.tensor([2, 2])
 
-    attention = AdditiveAttention(query_size=query_size, 
-                                  key_size=key_size, 
-                                  num_hiddens=num_hiddens, 
+    attention = AdditiveAttention(query_size=query_size,
+                                  key_size=key_size,
+                                  num_hiddens=num_hiddens,
                                   dropout=0.0)
     attention.eval()
     print(attention(queries, keys, values, valid_lens).shape)
 
-    print('+'*20, 'test `DotProductAttention()`')
+    print('+' * 20, 'test `DotProductAttention()`')
     query_size = key_size = d = 2
-    queries = torch.normal(mean=0, 
-                           std=1, 
+    queries = torch.normal(mean=0,
+                           std=1,
                            size=(batch_size, num_kvs, d))
     keys = torch.ones(size=(batch_size, num_kvs, key_size))
-    values = torch.arange(num_kvs*value_size, 
+    values = torch.arange(num_kvs * value_size,
                           dtype=torch.float32)
-    values = values.reshape(shape=(1, num_kvs, value_size)).repeat(repeats=(batch_size, 1, 1))
+    values = values.reshape((1, num_kvs, value_size)).repeat(repeats=(batch_size, 1, 1))
 
     print('queries shape: ', queries.shape)
     print('keys shape:    ', keys.shape)
