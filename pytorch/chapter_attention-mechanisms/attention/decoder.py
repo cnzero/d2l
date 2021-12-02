@@ -25,5 +25,18 @@ class Decoder(nn.Module):
                 state):
         raise NotImplementedError
 
+
 class AttentionDecoder(Decoder):
+    def __init__(self):
+        super(AttentionDecoder, self).__init__()
+        pass
+
+    def init_state(self,
+                   enc_outputs):
+        pass
+
+    def forward(self,
+                X,
+                state):
+        pass
     
