@@ -49,7 +49,8 @@ class Inception(nn.Module):
 
         return torch.cat((outputs_p1,
                           outputs_p2,
-                          outputs_p3),
+                          outputs_p3,
+                          outputs_p4),
                          dim=1)
 
 
@@ -79,9 +80,41 @@ if __name__ == '__main__':
                                     padding=1))
     b3 = nn.Sequential(Inception(in_channels=192,
                                  out_channels=[64, [96, 128], [16, 32], 32]),
+                                 # 64+128+32+32 = 256
                        Inception(in_channels=256,
                                  out_channels=[128, [128, 192], [32, 96], 64]),
+                                 # 128+192+96+64 = 480
                        nn.MaxPool2d(kernel_size=3,
                                     stride=2,
                                     padding=1))
-    b4 = nn.Sequential(Inception(in_channels=480))
+    b4 = nn.Sequential(Inception(in_channels=480,
+                                 out_channels=[192, [96, 208], [16, 48], 64]),
+                                 # 192+208+48+64 = 512
+                       Inception(in_channels=512,
+                                 out_channels=[160, [112, 224], [24, 64], 64]),
+                                 # 160+224+64+64 = 512
+                       Inception(in_channels=512,
+                                 out_channels=[128, [128, 256], [24, 64], 64]),
+                                 # 128+256+64+64 = 512
+                       Inception(in_channels=512,
+                                 out_channels=[112, [144, 288], [32, 64], 64]),
+                                 # 112+288+64+64 = 528
+                       Inception(in_channels=528,
+                                 out_channels=[256, [160, 320], [32, 128], 128]),
+                                 # 256+320+128+128 = 832
+                       nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
+
+    b5 = nn.Sequential(Inception(in_channels=832,
+                                 out_channels=[256, [160, 320], [32, 128], 128]),
+                                 # 256+320+128+128 = 832
+                       Inception(in_channels=832,
+                                 out_channels=[384, [192, 384], [48, 128], 128]),
+                                 # 384+384+128+128 = 1024
+                       nn.AdaptiveAvgPool2d(output_size=(1, 1)),
+                       nn.Flatten())
+    network = nn.Sequential(b1, b2, b3, b4, b5, nn.Linear(in_features=1024,
+                                                          out_features=10))
+
+    inputs = torch.rand(size=(1, 1, 96, 96))
+    outputs = network(inputs)
+    print('outputs shape: ', outputs.shape)
